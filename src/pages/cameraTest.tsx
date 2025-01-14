@@ -25,6 +25,7 @@ import { FaRegTrashCan } from "react-icons/fa6";
 
 import { useEventListener } from "usehooks-ts";
 import { createReadStream } from "fs";
+import { parseImageAI } from "@/lib/parseTextAI";
 function CameraTest() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<
@@ -82,13 +83,27 @@ function CameraTest() {
         setImage(imageSrc.main);
         setImageCrop(imageSrc.crop);
         if (!ocr) return;
-        const output = await parseImage(imageSrc.crop as any);
-        setSet(output.setCode || "");
-        setCNum(output.number || "");
+        const output = await parseImageAI(imageSrc.crop as any);
+        let set = output.setCode || output.set_code  || ""
+        let num = output.number || output.collector_number || ""
+        setSet(set);
+        setCNum(num);
         if (!scryfall) return;
-        const { data } = await client.get(
-          `/cards/${output.setCode}/${Number(output.number)}`
-        );
+        let data
+        try {
+          data  = (await client.get(
+            `/cards/${set}/${num}`
+          )).data;
+        } catch {
+          if(num.includes("-"))
+          data  = (await client.get(
+            `/cards/${num.split("-")[0]}/${num.split("-")[1]}`
+          )).data;
+          set = num.split("-")[0]
+          num = num.split("-")[1]
+          setSet(set);
+          setCNum(num);
+          }
         setCardName(data.name);
         setScryfallID(data.id);
         console.log(data);
@@ -98,14 +113,14 @@ function CameraTest() {
             {
               scryfallID: data.id,
               cardName: data.name,
-              setCode: output.setCode || "",
-              cardNumber: output.number,
+              setCode: set,
+              cardNumber: num,
             },
             ...cards,
           ]);
           navigator.clipboard.writeText(
             `scryfall id
-${cards.map((x) => x.scryfallID).join("\n")}`
+${cards.map((x: any) => x.scryfallID).join("\n")}`
           );
         }
       } else {
@@ -235,6 +250,23 @@ ${cards.map((x) => x.scryfallID).join("\n")}`
             }}
           >
             Copy Scryfall IDs To Clipboard
+          </Button>
+          <Button
+            onClick={() => {
+              navigator.clipboard.writeText(
+                `scryfall id, foil
+${cards.map((x) => x.scryfallID + ", true").join("\n")}`
+              );
+            }}
+          >
+            Copy Scryfall IDs To Clipboard as foil
+          </Button>
+          <Button
+            onClick={() => {
+              setCards([]);
+            }}
+          >
+            Clear Cards
           </Button>
         </div>
         <div className="w-3/4">
